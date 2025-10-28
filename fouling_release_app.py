@@ -59,7 +59,7 @@ silicone_type = st.selectbox(
     "Select Silicone Oil type",
     ["PMM-0025", "PMM-1015", "PMM-1021", "PDM-0421"]
 )
-f3 = st.slider("Silicone oil fraction (grams)", 1.0, 3.0, 2.0)
+f3 = st.slider("Silicone oil fraction (grams)",0.0, 1.0, 3.0, 2.0)
 
 
 # --- Get descriptors ---
