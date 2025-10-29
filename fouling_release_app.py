@@ -4,7 +4,6 @@ import streamlit as st
 import pandas as pd
 import pickle
 import numpy as np
-import plotly.graph_objects as go
 from sklearn.preprocessing import StandardScaler
 
 # Streamlit app layout
