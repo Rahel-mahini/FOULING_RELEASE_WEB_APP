@@ -115,51 +115,50 @@ import streamlit as st
 import pandas as pd
 import pickle
 import numpy as np
+import plotly.graph_objects as go
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_squared_error
 
-# --- AD Helper Functions ---
-def applicability_domain(x_test_val, x_train_val):
-    """Calculates leverage-based AD."""
-    X_train = x_train_val
-    X_test = x_test_val
+# --- 1. Applicability Domain Functions (From your original request) ---
+def applicability_domain(x_test_normalized, x_train_normalized):
+    # Convert to values to ensure matrix operations work
+    X_train = x_train_normalized
+    X_test = x_test_normalized
     
-    # Calculate Hat Matrix inverse
-    xtx_inv = np.linalg.inv(X_train.T @ X_train)
+    # Calculate leverage for the training set
+    # Note: We use the 3 individual components for the leverage calculation
+    hat_matrix_train = X_train @ np.linalg.inv(X_train.T @ X_train) @ X_train.T
+    leverage_train = np.diagonal(hat_matrix_train).ravel()
     
-    # Leverage for test point: h = x_test * (X_train.T * X_train)^-1 * x_test.T
-    leverage_test = np.sum((X_test @ xtx_inv) * X_test, axis=1)
+    # Calculate leverage for the test set
+    hat_matrix_test = X_test @ np.linalg.inv(X_train.T @ X_train) @ X_test.T
+    leverage_test = np.diagonal(hat_matrix_test).ravel()
     
-    # threshold h* = 3 * (p + 1) / n
-    h3 = 3 * ((X_train.shape[1] + 1) / X_train.shape[0])
+    # threshold for the applicability domain
+    h3 = 3 * ((x_train_normalized.shape[1] + 1) / x_train_normalized.shape[0])  
     
-    return leverage_test[0], leverage_test[0] < h3
+    h_results = [valor < h3 for valor in leverage_test]
+    return h_results
 
 def get_color(confidence):
     colors = {"HIGH": "#90EE90", "MEDIUM": "#ADD8E6", "LOW": "#FFCCCB"}
     return colors.get(confidence, "#FFFFFF")
 
-# --- Load ML model ---
+# --- 2. Load Model and Data ---
 with open("Model/combinatorial_descision_tree.pkl", "rb") as f:
     model = pickle.load(f)
 
-# --- Load and Process training data (needed for AD) ---
 descriptors_df = pd.read_csv("Dataset/descriptors.csv")
-# Note: For AD, we need the actual combinatorial features used during training.
-# Assuming df_train_normalized is your training descriptor matrix:
-# Here we simulate the training matrix based on your selected features.
-# Ideally, you should load the pre-calculated X_train_scaled used during model fitting.
+# Prepare training matrix for AD (using the 3 features used to build components)
 X_train_raw = descriptors_df[['PW5', 'TIC1', 'MWC08']].values
-scaler = StandardScaler()
-X_train_scaled = scaler.fit_transform(X_train_raw)
-mean_val_training = 2.56 # Replace with the actual mean of your training target variable
+scaler_ad = StandardScaler()
+X_train_scaled = scaler_ad.fit_transform(X_train_raw)
 
-# --- App UI ---
+# --- 3. Streamlit UI ---
 st.title("Fouling Release Property Predictor")
 st.image("header.png", use_container_width=True)
 
 st.header("Select Components and Fractions")
-
 pdms_type = st.selectbox("Select PDMS type", ["DMS-V22", "DMS-V31"])
 f1 = st.slider("PDMS fraction (grams)", 15.0, 25.0, 20.0)
 
@@ -169,64 +168,55 @@ f2 = st.slider("Siloxane copolymer Crosslinker fraction (grams)", 0.5, 1.5, 1.0)
 silicone_type = st.selectbox("Select Silicone Oil type", ["PMM-0025", "PMM-1015", "PMM-1021", "PDM-0421"])
 f3 = st.slider("Silicone oil fraction (grams)", 0.0, 3.0, 2.0)
 
-# --- Get descriptors ---
+# --- 4. Logic & Prediction ---
+# Get raw descriptor values
 pw5 = descriptors_df.loc[descriptors_df['NAME'] == pdms_type, 'PW5'].values[0]
 tic1 = descriptors_df.loc[descriptors_df['NAME'] == siloxane_type, 'TIC1'].values[0]
 mwc08 = descriptors_df.loc[descriptors_df['NAME'] == silicone_type, 'MWC08'].values[0]
 
-# --- Compute combinatorial descriptor ---
-# Ensure this matches exactly how the model was trained
-comb_raw  =np.array([[f1*pw5 + f2*tic1 + f3*mwc08]])
-# comb_raw = np.array([[f1*pw5, f2*tic1, f3*mwc08]]) 
-comb_scaled = scaler.transform(comb_raw) # Scale the input
+# --- THE FIX ---
+# A. Combinatorial value for MODEL (Exactly like your original script)
+combinatorial_val = np.array([[f1*pw5 + f2*tic1 + f3*mwc08]])
 
+# B. Component values for AD (The 3 variables for leverage)
+ad_input_raw = np.array([[f1*pw5, f2*tic1, f3*mwc08]])
+ad_input_scaled = scaler_ad.transform(ad_input_raw)
 
-# --- Predict button ---
 if st.button("Predict Property"):
-    # 1. Prediction
-    prediction = model.predict(comb_scaled)[0] 
+    # Original Prediction logic
+    prediction = model.predict(combinatorial_val)[0]
     
-    # 2. AD Calculation (Leverage)
-    leverage_val, is_inside_h = applicability_domain(comb_scaled, X_train_scaled)
+    # AD calculation logic
+    h_results = applicability_domain(ad_input_scaled, X_train_scaled)
+    is_inside_h = h_results[0]
     
-    # 3. Residual AD Calculation
-    # Using a placeholder for "true" value as mean_value to calculate standardized residual
-    residual = mean_val_training - prediction
-    # Simplified Standardized Residual calculation for app context:
-    std_dev_train = 0.5 # Replace with the RMSE of your training set
-    std_resid = residual / std_dev_train
-    is_inside_std = -3 <= std_resid <= 3
+    # Residual logic (Standardized Residuals)
+    # Using dummy values for demonstration; replace with your dataset metrics if available
+    mean_val = 2.56 
+    std_dev_test = 0.5 
+    std_residual = (mean_val - prediction) / std_dev_test
+    is_inside_std = -3 <= std_residual <= 3
     
-    # 4. Determine Confidence Level
+    # Determine Confidence Level
+    confidence = "LOW"
     if is_inside_h and is_inside_std:
         confidence = "HIGH"
-    elif not is_inside_h and not is_inside_std:
-        confidence = "LOW"
-    elif not is_inside_h and is_inside_std:
+    elif is_inside_h or is_inside_std:
         confidence = "MEDIUM"
-    else:
-        confidence = "LOW"
 
-    # Display Results
     st.success(f"Predicted property value: {prediction:.3f}")
-    
-    # Result Dataframe
+
+    # Display Results Table
     result_df = pd.DataFrame({
         "PDMS": [pdms_type],
         "Siloxane": [siloxane_type],
         "Silicone": [silicone_type],
-        "Prediction": [round(prediction, 3)],
+        "Predicted Removal": [round(prediction, 3)],
         "Confidence": [confidence]
     })
 
-    # Apply styling to the dataframe
-    def style_confidence(val):
-        color = get_color(val)
-        return f'background-color: {color}'
-
-    st.subheader("Prediction Results")
-    st.dataframe(result_df.style.applymap(style_confidence, subset=['Confidence']))
+    st.dataframe(result_df.style.applymap(lambda x: f'background-color: {get_color(x)}', subset=['Confidence']))
 
     # Download Button
     csv = result_df.to_csv(index=False)
-    st.download_button("Download as CSV", csv, "prediction.csv", "text/csv")
+    st.download_button("Download CSV", csv, "prediction.csv", "text/csv")
