@@ -176,13 +176,15 @@ mwc08 = descriptors_df.loc[descriptors_df['NAME'] == silicone_type, 'MWC08'].val
 
 # --- Compute combinatorial descriptor ---
 # Ensure this matches exactly how the model was trained
-comb_raw = np.array([[f1*pw5, f2*tic1, f3*mwc08]]) 
+comb_raw  =np.array([[f1*pw5 + f2*tic1 + f3*mwc08]])
+# comb_raw = np.array([[f1*pw5, f2*tic1, f3*mwc08]]) 
 comb_scaled = scaler.transform(comb_raw) # Scale the input
+
 
 # --- Predict button ---
 if st.button("Predict Property"):
     # 1. Prediction
-    prediction = model.predict(comb_scaled)[0]
+    prediction = model.predict(comb_scaled)[0] 
     
     # 2. AD Calculation (Leverage)
     leverage_val, is_inside_h = applicability_domain(comb_scaled, X_train_scaled)
