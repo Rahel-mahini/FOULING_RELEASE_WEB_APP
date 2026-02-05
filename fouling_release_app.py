@@ -299,22 +299,26 @@ ad_input_scaled = scaler_ad.transform(ad_input_raw)
 if st.button("Predict Property"):
     prediction = model.predict(combinatorial_val)[0]
     
-    # Calculate Confidence
+    # 1. Leverage Check (AD)
     h_results = applicability_domain(ad_input_scaled, X_train_scaled)
     is_inside_h = h_results[0]
     
-    # Residual logic (Standardized Residuals)
-    mean_val_train = 2.56 
-    std_dev_train = 0.5 
-    std_residual = (mean_val_train - prediction) / std_dev_train
+    # 2. Updated Residual Check 
+    # NOTE: Set these to your actual training data target (Ulva Removal) average and SD
+    actual_training_mean = descriptors_df['PW5'].mean() # Placeholder: use your target mean
+    actual_training_std = 15.0 # Use your model's typical error (RMSE) or data SD
+    
+    std_residual = (actual_training_mean - prediction) / actual_training_std
     is_inside_std = -3 <= std_residual <= 3
     
-    # Confidence Logic
+    # --- Decision Tree for Confidence ---
     if is_inside_h and is_inside_std:
         confidence = "HIGH"
-    elif is_inside_h or is_inside_std:
+    elif is_inside_h: 
+        # Inside the chemistry domain, but an unusual predicted value
         confidence = "MEDIUM"
     else:
+        # Outside the chemistry domain (extrapolation)
         confidence = "LOW"
 
     st.success(f"Predicted property value (Ulva. linza Removal): {prediction:.3f}")
